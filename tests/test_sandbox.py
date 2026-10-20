@@ -1,26 +1,40 @@
-from src.tools.file_ops import write_file, edit_file
-from src.tools.shell_exec import run_bash_sandbox
+from src.tools.file_ops import write_file, read_file
+from src.graph.workflow import build_devin_graph
 
-# 1. AI writes a buggy calculator (a - b instead of a + b)
-write_file.invoke({"file_path": "calc.py", "content": "def add(a, b):\n    return a - b\n"})
+# 1. Setup: Let's plant a buggy calculator inside agent_workspace!
+buggy_code = """def add(a, b):
+    return a - b  # Bug 1: subtracting instead of adding!
 
-# 2. AI writes a pytest file to test add(2, 3) == 5
-test_code = """from calc import add
-
-def test_add():
-    assert add(2, 3) == 5
+def multiply(a, b):
+    return a + b  # Bug 2: adding instead of multiplying!
 """
-write_file.invoke({"file_path": "test_calc.py", "content": test_code})
+write_file.invoke({"file_path": "calc.py", "content": buggy_code})
+print("💣 Planted buggy 'calc.py' inside agent_workspace!\n")
 
-# 3. Run pytest on the buggy code (Should FAIL with EXIT_CODE: 1 and show the exact bug!)
-print("=== FIRST RUN (WITH BUG) ===")
-print(run_bash_sandbox.invoke({"command": "pytest test_calc.py"}))
+# 2. Build the Devin-Zero Brain
+app = build_devin_graph()
 
-# 4. Now fix the bug using edit_file and run pytest again (Should PASS with EXIT_CODE: 0!)
-edit_file.invoke({"file_path": "calc.py", "target_code": "return a - b", "replacement_code": "return a + b"})
+# 3. Give Devin-Zero a natural language task (Notice we just ask it in plain English!)
+initial_state = {
+    "task": "Inspect calc.py, fix the bugs in add() and multiply(), and make sure test_calc.py passes all unit tests.",
+    "messages": [],
+}
 
-print("\n=== SECOND RUN (AFTER FIX) ===")
-print(run_bash_sandbox.invoke({"command": "pytest test_calc.py"}))
+print("🚀 Starting Devin-Zero Autonomous Loop...\n")
 
-from src.tools.repo_map import get_repo_map
-print("\n" + get_repo_map.invoke({}))
+# 4. Stream each node step so we can watch the AI think in real time!
+for step in app.stream(initial_state):
+    for node_name, node_output in step.items():
+        print(f"👉 Finished Node: [{node_name.upper()}]")
+        if "plan" in node_output:
+            print("📋 AI Plan:")
+            for p in node_output["plan"]:
+                print(f"   {p}")
+        if "test_output" in node_output:
+            print("🧪 Pytest Result:")
+            print(node_output["test_output"])
+        print("-" * 50)
+
+# 5. Let's inspect calc.py at the end to verify the AI actually fixed the code!
+print("\n✨ FINAL FIXED calc.py INSIDE WORKSPACE:")
+print(read_file.invoke({"file_path": "calc.py"}))
